@@ -1,4 +1,7 @@
+from multiprocessing import Pool
 import requests
+import numpy as np
+from math import floor
 url = 'http://releases.ubuntu.com/16.04.2/SHA1SUMS'
 
 proxies = {
@@ -6,21 +9,33 @@ proxies = {
   'https': 'http://10.3.100.207:8080',
 }
 
-headers = {}
+def getRanges(bytesRange, n):
+    stepSize = (bytesRange[1] - bytesRange[0])/ n
+    steps =  np.array([i * stepSize for i in range(n+1)])
+    steps[-1] = steps[-1] + length % n 
+    return zip(steps[:-1], (steps - 1)[1:])
 
-response = requests.head(url)
-content = int(response.headers.get('content-length'))
-steps = [int(content/2), content - int(content/2)]
+def unit(range):
+    headers={'Range': 'bytes={}-{}'.format(range[0], range[1])}
+    r = requests.get(url, proxies=proxies, headers=headers)
+    return r.content
 
-headers={'Range': 'bytes=0-220'}
-r = requests.get(url, proxies=proxies, headers=headers)
-print r.content, type(r.content), len(bytearray(r.content, 'utf-8'))
+def verify(hash1, hash2):
+    print hash1==hash2
 
-headers={'Range': 'bytes=221-443'}
-r2 = requests.get(url, proxies=proxies, headers=headers)
-print r2.content, type(r2.content), len(bytearray(r2.content, 'utf-8'))
+if __name__ == '__main__':
+    n = 4
+    p = Pool(n)
+    
+    response = requests.head(url)
+    length = int(response.headers.get('content-length'))
+    ranges = getRanges((0,length-1), n)
+    out = p.map(unit, ranges)
+    out = reduce((lambda x, y: x + y), out)
+    truth = requests.get(url, proxies=proxies).content
+    verify(out, truth)
 
-with open('SHA1SUMS_','w') as f:
-	f.write(r.content + r2.content)
+
+
 
 
