@@ -3,8 +3,8 @@ import requests
 import numpy as np
 import time
 from matplotlib import pyplot as plt
-# url = 'http://releases.ubuntu.com/16.04.2/SHA1SUMS'
-url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-desktop-amd64.iso.zsync'
+url = 'http://releases.ubuntu.com/16.04.2/SHA1SUMS'
+# url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-desktop-amd64.iso.zsync'
 
 proxies = {
   'http': 'http://10.3.100.207:8080',
@@ -14,7 +14,7 @@ proxies = {
 def getRanges(bytesRange, n):
     stepSize = (bytesRange[1] - bytesRange[0])/ n
     steps =  np.array([i * stepSize for i in range(n+1)])
-    steps[-1] = steps[-1] + length % n 
+    steps[-1] = steps[-1] + (bytesRange[1] - bytesRange[0]) % n 
     return zip(steps[:-1], (steps - 1)[1:])
 
 def unit(tup):
@@ -24,34 +24,40 @@ def unit(tup):
             r = requests.get(url, proxies=proxies, headers=headers)
             break
         except Exception as e:
+            print 'Connection Error. Attempting again'
             continue
     # print 'Completed connection {}'.format(tup[0])
     return r.content
 
     # print hashlib.md5(open(full_path, 'rb').read()).hexdigest()
 
+def main(url, n):
+    print url
+    response = requests.head(url)
+    length = int(response.headers.get('content-length'))
+    print 'Downloading {} bytes'.format(length)
+    ranges = getRanges((0,length-1), n)
+    ranges =  list(enumerate(ranges))
+    t  = time.time()
+    out = Pool(n).map(unit, ranges)
+    t = time.time() - t 
+    print t
+    return reduce((lambda x, y: x + y), out), t
+
 if __name__ == '__main__':
-    s = [1, 2 ,5, 10, 20, 50, 100, 200, 500]
+    s = [1, 2 ,5, 10, 20, 50, 100]
     ts = []
+    out = None
     for i in s:
-        n = 10
-        p = Pool(i)
-        
-        response = requests.head(url)
-        length = int(response.headers.get('content-length'))
-        ranges = getRanges((0,length-1), n)
-        ranges =  list(enumerate(ranges))
-        t  = time.time()
-        out = p.map(unit, ranges)
-        ts.append( time.time() - t )
-        print i
+        content, t = main(url, i)
+        ts.append(t)
+        out = content
 
     plt.figure()
     plt.plot(s, ts)
     plt.savefig('blaze.png')
     plt.show()
 
-    out = reduce((lambda x, y: x + y), out)
     # truth = requests.get(url, proxies=proxies).content
     # print out == truth
 
@@ -62,4 +68,4 @@ if __name__ == '__main__':
 
     print 'Saving'
     with open(url.split('/')[-1], 'w') as f:
-        f.write(out)
+        f.write(content)
