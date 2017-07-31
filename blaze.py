@@ -1,17 +1,17 @@
+import multiprocessing
 from multiprocessing import Pool
 import requests
-import numpy as np
 import time
 from math import ceil
+import os
+import psutil
 from matplotlib import pyplot as plt
-import progressbar
+import numpy as np
 
-
-bar = progressbar.ProgressBar(redirect_stdout=True)
 # url = 'http://releases.ubuntu.com/16.04.2/SHA1SUMS'
 # url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-i386.jigdo'
-url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-i386.iso.zsync'
-
+# url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-i386.iso.zsync'
+url = 'http://releases.ubuntu.com/16.04.2/ubuntu-16.04.2-server-i386.template'
 proxies = {
   'http': 'http://10.3.100.207:8080',
   'https': 'http://10.3.100.207:8080',
@@ -31,13 +31,13 @@ def unit(tup):
             r = requests.get(url, stream=True, proxies=proxies, headers=headers)
             break
         except Exception as e:
-            print 'Connection Error. Attempting again'
+            print 'Connection Error. Attempting again {}'.format(tup[0])
             continue
     # content = str()
     # for i in r.iter_content(chunk_size=10):
         # content += i
         # bar.update(len(content)*100.0/l)
-    # print 'Completed connection {}'.format(tup[0])
+    # print 'Completed connection {}'.format(tup[0]), os.getppid(), os.getpid()
     return r.content
 
 
@@ -50,13 +50,14 @@ def main(url, n):
     ranges =  list(enumerate(ranges))
     t  = time.time()
     out = p.map(unit, ranges)
-    t = time.time() - t 
-    print t
     p.close()
     p.join()
+    t = time.time() - t
+    print t
     return reduce((lambda x, y: x + y), out), t
 
 def self(x):
+    # print os.getppid(), os.getpid()
     return x
     
 def parallelChunk(url, n):
@@ -68,26 +69,24 @@ def parallelChunk(url, n):
     r = requests.get(url, stream=True, proxies=proxies)
     points = r.iter_content(chunk_size=chunkSize)
     t = time.time()
-    out = p.imap(self, points)
-    t = time.time() - t
-    print t
+    out = p.map(self, points)
     p.close()
     p.join()
+    t = time.time() - t
+    print t
     return reduce((lambda x, y: x + y), out), t
 
 if __name__ == '__main__':
-
     t1 = []
-    # t2 = []
-    times = 10
-    for i in range(times):
+    t2 = []
+    times = 5
+    for i in 10*(np.arange(times) + 1):
         print i
-        t1.append(parallelChunk(url, i+1)[-1])
-    #     t2.append(main(url, 5)[-1])
+        t1.append(np.mean([parallelChunk(url, i)[-1] for _ in range(10)]))
+        t2.append(np.mean([main(url, i)[-1] for _ in range(10)]))
     plt.figure()
-    plt.plot(range(times), t1, 'r.-')
+    plt.plot(10*(np.arange(times) + 1), t1, 'r.-', 10*(np.arange(times) + 1), t2, 'b.-')
     plt.savefig('out.png')
-    # print parallelChunk(url, 50)[0] == main(url, 50)[0]
     # truth = requests.get(url, proxies=proxies).content
     # print truth = main(url, 5)
     # print truth == parallelChunk(url, 5)[0]
